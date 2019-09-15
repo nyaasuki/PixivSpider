@@ -129,3 +129,9 @@ dmypy.json
 
 pixiv.json
 img/
+.idea/inspectionProfiles/profiles_settings.xml
+.idea/misc.xml
+.idea/modules.xml
+.idea/PixivSpider.iml
+.idea/vcs.xml
+.idea/.gitignore
