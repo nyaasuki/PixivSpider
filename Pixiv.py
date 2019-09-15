@@ -36,7 +36,14 @@ class PixivSpider(object):
             print(f'{file_name}已存在！')
             return 1
         print(f'开始下载：{file_name}')
-        img_temp = requests.get(url, headers=self.headers)
+        t = 0
+        while t < 3:
+            try:
+                img_temp = requests.get(url, headers=self.headers, timeout=15)
+                break
+            except requests.exceptions.ConnectTimeout:
+                print("连接超时！正在重试！")
+                t += 1
         with open(f'./img/{file_name}', 'wb') as fp:
             fp.write(img_temp.content)
 
