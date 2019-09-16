@@ -11,11 +11,14 @@ import os
 try:
     import requests
     import redis
+
 except:
     print('检测到缺少必要包！正在尝试安装！.....')
     os.system(r'pip install -r requirements.txt')
     import requests
     import redis
+
+requests.packages.urllib3.disable_warnings()
 
 
 class PixivSpider(object):
@@ -26,7 +29,7 @@ class PixivSpider(object):
         self.r = redis.Redis(host='localhost', port=6379, decode_responses=True)
 
     def get_list(self, pid):
-        response = requests.get(self.ajax_url.format(pid), headers=self.headers)
+        response = requests.get(self.ajax_url.format(pid), headers=self.headers, verify=False)
         json_data = response.json()
         list_temp = json_data['body']
         for l in list_temp:
@@ -52,7 +55,7 @@ class PixivSpider(object):
         t = 0
         while t < 3:
             try:
-                img_temp = requests.get(url, headers=self.headers, timeout=15)
+                img_temp = requests.get(url, headers=self.headers, timeout=15, verify=False)
                 break
             except requests.exceptions.ConnectTimeout:
                 print("连接超时！正在重试！")
@@ -67,7 +70,7 @@ class PixivSpider(object):
             'p': f'{num}',
             'format': 'json'
         }
-        response = requests.get(self.top_url, params=params, headers=self.headers)
+        response = requests.get(self.top_url, params=params, headers=self.headers, verify=False)
         json_data = response.json()
         self.pixiv_spider_go(json_data['contents'])
 
