@@ -135,3 +135,4 @@ img/
 .idea/PixivSpider.iml
 .idea/vcs.xml
 .idea/.gitignore
+test.py
