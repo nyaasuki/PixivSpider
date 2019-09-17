@@ -60,6 +60,9 @@ class PixivSpider(object):
             except requests.exceptions.ConnectTimeout:
                 print("连接超时！正在重试！")
                 t += 1
+            except requests.exceptions.ConnectionError:
+                print('连接异常！正在重试！')
+                t += 1
         with open(f'./img/{file_name}', 'wb') as fp:
             fp.write(img_temp.content)
 
@@ -87,7 +90,10 @@ class PixivSpider(object):
 
     @classmethod
     def pixiv_main(cls):
-        cookie = input('请输入一个cookie：')
+        cookie = pixiv.r.get('cookie')
+        if not cookie:
+            cookie = input('请输入一个cookie：')
+            pixiv.r.set('cookie', cookie)
         cls.headers = {
             'accept': 'application/json',
             'accept-language': 'zh-CN,zh;q=0.9,zh-TW;q=0.8,en-US;q=0.7,en;q=0.6',
