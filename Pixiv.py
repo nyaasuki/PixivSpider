@@ -98,8 +98,8 @@ class PixivSpider(object):
             'sec-fetch-site': 'same-origin',
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.75 Safari/537.36'
         }
-        m = input('说下，准备安排多少页？\n')
-        for i in range(1, int(m) + 1, 1):
+        print('开始抓取...')
+        for i in range(1, 11, 1):  # p站每日排行榜最多为500个
             pixiv.get_top_url(i)
             for j in pixiv.get_top_pic():  # 接口暂时不想写了 先这样凑合一下吧
                 pixiv.get_list(j)
