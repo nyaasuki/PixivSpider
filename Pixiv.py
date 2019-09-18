@@ -19,6 +19,7 @@ except:
     import redis
 
 requests.packages.urllib3.disable_warnings()
+error_list = []
 
 
 class PixivSpider(object):
@@ -29,6 +30,9 @@ class PixivSpider(object):
         self.r = redis.Redis(host='localhost', port=6379, decode_responses=True)
 
     def get_list(self, pid):
+        """
+        :param pid: 插画ID
+        """
         response = requests.get(self.ajax_url.format(pid), headers=self.headers, verify=False)
         json_data = response.json()
         list_temp = json_data['body']
@@ -36,37 +40,52 @@ class PixivSpider(object):
             url_tamp = l['urls']['original']
             n = self.r.get(pid)
             if not n:
-                self.get_img(url_tamp)
+                why_not_do = self.get_img(url_tamp)
+                # 判断是否返回异常 如果有异常则取消这个页面的爬取 等待下次
+                if why_not_do == 1:
+                    return pid
             else:
                 print(f'插画ID:{pid}已存在！')
+                break
 
             # with open('pixiv.json', 'a', encoding='utf-8') as f:
             #     f.write(url_tamp + '\n')
             # 导出
 
     def get_img(self, url):
+        """
+
+        :param url: 作品页URL
+        :return:
+        """
         if not os.path.isdir('./img'):
             os.makedirs('./img')
         file_name = re.findall('/\d+/\d+/\d+/\d+/\d+/\d+/(.*)', url)[0]
         if os.path.isfile(f'./img/{file_name}'):
-            print(f'{file_name}已存在！')
-            return 1
+            print(f'文件：{file_name}已存在，跳过')
+            #  单个文件存在并不能判断是否爬取过
+            return 0
         print(f'开始下载：{file_name}')
         t = 0
         while t < 3:
             try:
                 img_temp = requests.get(url, headers=self.headers, timeout=15, verify=False)
                 break
-            except requests.exceptions.ConnectTimeout:
-                print("连接超时！正在重试！")
-                t += 1
-            except requests.exceptions.ConnectionError:
+            except requests.exceptions.RequestException:
                 print('连接异常！正在重试！')
                 t += 1
+        if t == 3:
+            # 返回异常 取消此次爬取 等待下次
+            return 1
         with open(f'./img/{file_name}', 'wb') as fp:
             fp.write(img_temp.content)
 
     def get_top_url(self, num):
+        """
+
+        :param num: 页码
+        :return:
+        """
         params = {
             'mode': 'daily',
             'content': 'illust',
@@ -81,12 +100,12 @@ class PixivSpider(object):
         for url in self.data:
             illust_id = url['illust_id']
             illust_user = url['user_id']
-            yield illust_id  # 生成PID 、用户ID
+            yield illust_id  # 生成PID
             self.r.set(illust_id, illust_user)
 
     @classmethod
-    def pixiv_spider_go(cls, json_data):
-        cls.data = json_data
+    def pixiv_spider_go(cls, data):
+        cls.data = data
 
     @classmethod
     def pixiv_main(cls):
@@ -107,8 +126,12 @@ class PixivSpider(object):
         print('开始抓取...')
         for i in range(1, 11, 1):  # p站每日排行榜最多为500个
             pixiv.get_top_url(i)
-            for j in pixiv.get_top_pic():  # 接口暂时不想写了 先这样凑合一下吧
-                pixiv.get_list(j)
+            for j in pixiv.get_top_pic():
+                k = pixiv.get_list(j)  # 接口暂时不想写了 先这样凑合一下吧
+                if k:
+                    error_list.append(k)
+        for k in error_list:
+            pixiv.r.delete(k)
 
 
 if __name__ == '__main__':
