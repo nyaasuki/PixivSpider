@@ -137,3 +137,6 @@ img/
 .idea/.gitignore
 test.py
 .idea/dictionaries/i.xml
+.DS_Store
+.idea/.name
+.idea/workspace.xml
