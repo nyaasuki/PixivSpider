@@ -1,7 +1,8 @@
 """
 P站小爬虫 爬每日排行榜
-环境需求：Python3.6+ / Redis
+环境需求：Python3.6+ / Redis 
 项目地址：https://github.com/nyaasuki/PixivSpider
+支持 M1 芯片
 
 """
 
