@@ -125,21 +125,7 @@ class PixivSpider(Cmd):
         cls.data = data
 
     @classmethod
-    def pixiv_main(cls):
-        cookie = pixiv.r.get('cookie')
-        if not cookie:
-            cookie = input('请输入一个cookie：')
-            pixiv.r.set('cookie', cookie)
-        cls.headers = {
-            'accept': 'application/json',
-            'accept-language': 'zh-CN,zh;q=0.9,zh-TW;q=0.8,en-US;q=0.7,en;q=0.6',
-            'dnt': '1',
-            'cookie': f'{cookie}',
-            'referer': 'https://www.pixiv.net/',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-origin',
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.75 Safari/537.36'
-        }
+    def pixiv_main(cls):       
         print('开始抓取...')
         for i in range(1, 11, 1):  # p站每日排行榜最多为500个
             pixiv.get_top_url(i)
@@ -153,28 +139,55 @@ class PixivSpider(Cmd):
 
 """
 
-           C    M    D    循   环   区   域
+                      C    M    D    循   环   区   域
 ---------------------------------------------------------------------------------
 
 """
 
 
     def main(self):
+        cookie = pixiv.r.get('cookie')
+        if not cookie:
+            cookie = input('[Pixiv] 请输入一个cookie：')
+            pixiv.r.set('cookie', cookie)
+        self.headers = {
+            'accept': 'application/json',
+            'accept-language': 'zh-CN,zh;q=0.9,zh-TW;q=0.8,en-US;q=0.7,en;q=0.6',
+            'dnt': '1',
+            'cookie': f'{cookie}',
+            'referer': 'https://www.pixiv.net/',
+            'sec-fetch-mode': 'cors',
+            'sec-fetch-site': 'same-origin',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.75 Safari/537.36'
+        }
+        if cookie == () :
+            print('[Redis] 未输入cookie，部分功能受限')
+        else
+            print(f'[Redis] 成功储存Cookie：{cookie}')
+            
         self.cmdloop()
 
     def do_help(self):
-        pass
+        print('[Help] rank  - 爬取 Pixiv每日排行榜前500的插画')
+        print('[Help] stars - 爬取 你已经添加❤的插画  *需要用户cookie*')
+        print('[Help] like - 爬取 每日推荐插画   *需要用户cookie*')
+        print('[Help] cookie  - 更换已保存的cookie')
+        print('[Help] quit  - 退出程序')
 
-    def do_exit(self):
-        pass
+
+    def do_quit(self):
+        exit()
 
     def do_rank(self):
-        pass
+        self.pixiv_main()
 
     def do_stars(self):
         pass
 
     def do_like(self):
+        pass
+
+    def do_cookie(self):
         pass
 
 
