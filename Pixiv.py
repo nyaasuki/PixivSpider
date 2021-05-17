@@ -13,23 +13,25 @@ P站小爬虫 爬每日排行榜
 
 """
 
-import re
 import os
+import re
 from cmd import Cmd
 
+from requests.models import Response
+
 try:
-    import requests
+    print('[System] 初始化中.....')
     import redis
+    import requests
 
 except:
-    print('检测到缺少必要包！正在尝试安装！.....')
+    print('[System] 检测到缺少必要包！正在尝试安装！.....')
     os.system(r'pip install -r requirements.txt')
-    import requests
     import redis
+    import requests
 
-requests.packages.urllib3.disable_warnings()
+requests.packages.urllib3.disable_warnings()  # 解决报错
 error_list = []
-
 
 """
 
@@ -42,9 +44,12 @@ error_list = []
 class PixivSpider(Cmd):
 
     def __init__(self):
+        super().__init__()
         self.ajax_url = 'https://www.pixiv.net/ajax/illust/{}/pages'  # id
         self.top_url = 'https://www.pixiv.net/ranking.php'
-        self.r = redis.Redis(host='localhost', port=6379, decode_responses=True)
+        self.home_url = 'https://www.pixiv.net/users/{}'
+        self.stars_url = 'https://www.pixiv.net/users/{}/bookmarks/artworks'
+        self.r = redis.Redis(host='localhost', port=6379,decode_responses=True)
 
     def get_list(self, pid):
         """
@@ -86,7 +91,8 @@ class PixivSpider(Cmd):
         t = 0
         while t < 3:
             try:
-                img_temp = requests.get(url, headers=self.headers, timeout=15, verify=False)
+                img_temp = requests.get(
+                    url, headers=self.headers, timeout=15, verify=False)
                 break
             except requests.exceptions.RequestException:
                 print('连接异常！正在重试！')
@@ -125,7 +131,7 @@ class PixivSpider(Cmd):
         cls.data = data
 
     @classmethod
-    def pixiv_main(cls):       
+    def pixiv_main(cls):
         print('开始抓取...')
         for i in range(1, 11, 1):  # p站每日排行榜最多为500个
             pixiv.get_top_url(i)
@@ -135,22 +141,26 @@ class PixivSpider(Cmd):
                     error_list.append(k)
         for k in error_list:
             pixiv.r.delete(k)
-        
-
-"""
-
-                      C    M    D    循   环   区   域
----------------------------------------------------------------------------------
-
-"""
-
-
-    def main(self):
+    
+    def main(self):  # 全新的古老循环
+        global uid , cookie ,temp_headers
+        uid = pixiv.r.get('uid')
         cookie = pixiv.r.get('cookie')
         if not cookie:
+            print('[Pixiv] 未检测到保存的cookie，此项可不输入，但是部分功能受限！')
             cookie = input('[Pixiv] 请输入一个cookie：')
-            pixiv.r.set('cookie', cookie)
-        self.headers = {
+            if not cookie:
+                pixiv.cmdloop()
+        if not uid:
+             print('[Pixiv] 未检测到保存的UID，此UID必须配合Cookie使用，可以爬取某个用户的（包括不限于自己）收藏的插画！')
+             uid = input('[Pixiv] 请输入一个uid：')
+             pixiv.r.set('uid', uid)
+        if not uid:
+            print('[Redis] 未输入uid，部分功能受限')
+        else:
+            print(f'[Redis] 成功读取uid：{uid}')
+            print('[Pixiv] 正在连接至Pixiv.....')
+        temp_headers = {
             'accept': 'application/json',
             'accept-language': 'zh-CN,zh;q=0.9,zh-TW;q=0.8,en-US;q=0.7,en;q=0.6',
             'dnt': '1',
@@ -158,38 +168,61 @@ class PixivSpider(Cmd):
             'referer': 'https://www.pixiv.net/',
             'sec-fetch-mode': 'cors',
             'sec-fetch-site': 'same-origin',
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.75 Safari/537.36'
-        }
-        if cookie == () :
-            print('[Redis] 未输入cookie，部分功能受限')
-        else
-            print(f'[Redis] 成功储存Cookie：{cookie}')
-            
-        self.cmdloop()
+            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1 Safari/605.1.15'
+            }
 
-    def do_help(self):
+        try:
+            response = requests.get(self.home_url.format(uid), headers = temp_headers, verify=False)
+            user_name = re.findall('og:title" content="(.*?)">', response.text)
+            if not user_name:
+                print('[Pixiv] 未查询到ID，请检查您的uid是否输入正确！')
+                print('[Redis] 正在清除uid记录.....')
+                self.r.delete('uid')
+                self.main()
+            print(f'[Pixiv] 欢迎～{user_name[0]}!')
+            print('[Pixiv] 是不是觉得迷茫呢？请输入help来获取帮助吧！')
+            print('[Pixiv] 我只能看得懂普通的小写字母哦！！！')
+        except:
+            print('[Pixiv] 未能连接到Pixiv服务器，请检查您的网络。')
+            exit()
+        
+        self.do_stars(self)
+        # self.cmdloop()
+
+    def do_help(self, arg):
+        print('…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·')
         print('[Help] rank  - 爬取 Pixiv每日排行榜前500的插画')
-        print('[Help] stars - 爬取 你已经添加❤的插画  *需要用户cookie*')
-        print('[Help] like - 爬取 每日推荐插画   *需要用户cookie*')
-        print('[Help] cookie  - 更换已保存的cookie')
+        print('[Help] stars - 爬取 你已经添加❤的插画  *需要用户UID*')
+        print('[Help] uid  - 更换已保存的uid')
         print('[Help] quit  - 退出程序')
+        print('…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·')
 
-
-    def do_quit(self):
+    def do_quit(self, arg):
         exit()
 
-    def do_rank(self):
+    def do_rank(self, arg):
         self.pixiv_main()
 
-    def do_stars(self):
+    def do_stars(self, arg):
+        if not uid:
+            print('[Pixiv] 您未输入uid，无法使用本功能哦！')
+            self.main()
+        response = requests.get(self.stars_url.format(uid), headers = temp_headers, verify=False)
+        # img src="https://i.pximg.net/c/250x250_80_a2/img-master/img/2021/04/06/18/20/45/88976071_p0_square1200.jpg
+        print(response.text)
+        # i = input()
+        pid = re.findall('illust_id=(\d+).*',response.text)
+        print(pid)
+        # for i in pid:
+        #     print(i)
+        #     self.get_list(i)
+    def do_like(self, arg):
         pass
 
-    def do_like(self):
-        pass
-
-    def do_cookie(self):
-        pass
-
+    def do_uid(self, arg):
+        pixiv.r.delete('uid')
+        print('[Redis] uid清除完成了喵！')
+        self.main()
 
 
 """
@@ -198,8 +231,6 @@ class PixivSpider(Cmd):
 ----------------------------------------------------------
 
 """
-
-
 
 if __name__ == '__main__':
     pixiv = PixivSpider()
