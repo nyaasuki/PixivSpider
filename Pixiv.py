@@ -6,8 +6,16 @@ P站小爬虫 爬每日排行榜
 
 """
 
+"""
+
+                    载   入   区   域
+--------------------------------------------------------------
+
+"""
+
 import re
 import os
+from cmd import Cmd
 
 try:
     import requests
@@ -23,7 +31,15 @@ requests.packages.urllib3.disable_warnings()
 error_list = []
 
 
-class PixivSpider(object):
+"""
+
+           V   1   .   0   祖   传   代   码   区   域   
+---------------------------------------------------------------------
+
+"""
+
+
+class PixivSpider(Cmd):
 
     def __init__(self):
         self.ajax_url = 'https://www.pixiv.net/ajax/illust/{}/pages'  # id
@@ -133,10 +149,47 @@ class PixivSpider(object):
                     error_list.append(k)
         for k in error_list:
             pixiv.r.delete(k)
+        
+
+"""
+
+           C    M    D    循   环   区   域
+---------------------------------------------------------------------------------
+
+"""
+
+
+    def main(self):
+        self.cmdloop()
+
+    def do_help(self):
+        pass
+
+    def do_exit(self):
+        pass
+
+    def do_rank(self):
+        pass
+
+    def do_stars(self):
+        pass
+
+    def do_like(self):
+        pass
+
+
+
+"""
+
+                     启   动   区   域
+----------------------------------------------------------
+
+"""
+
 
 
 if __name__ == '__main__':
     pixiv = PixivSpider()
-    pixiv.pixiv_main()
+    pixiv.main()
     # for id_url in pixiv.get_list():
     #     pixiv.get_img(id_url)
