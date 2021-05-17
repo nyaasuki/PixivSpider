@@ -44,10 +44,6 @@ ERROR: No matching distribution found for resquests`
 
 此项储存在本地redis中
 
-3.复位程序
-
-请清除Redis中的数据，更换cookie同理
-
 ## 特别提醒
 
 正常来说，当没有出现上方问题时，程序出现问题大多为你的上网方式不够科学
