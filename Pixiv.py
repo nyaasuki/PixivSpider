@@ -17,17 +17,18 @@ import os
 import re
 from cmd import Cmd
 
+from lxml import html
+
 
 try:
 
     import redis
-    import requests-html
-
+    from requests_html import HTMLSession,requests
 except:
     print('[System] 检测到缺少必要包！正在尝试安装！.....')
     os.system(r'pip install -r requirements.txt')
     import redis
-    import requests-html
+    from requests_html import HTMLSession,requests
 
 requests.packages.urllib3.disable_warnings()  # 解决报错
 error_list = []
@@ -57,7 +58,7 @@ class PixivSpider(Cmd):
         """
         :param pid: 插画ID
         """
-        response = requests.get(self.ajax_url.format(pid), headers=self.headers, verify=False)
+        response = self.session.get(self.ajax_url.format(pid), headers=temp_headers, verify=False)
         json_data = response.json()
         list_temp = json_data['body']
         for l in list_temp:
@@ -93,10 +94,10 @@ class PixivSpider(Cmd):
         t = 0
         while t < 3:
             try:
-                img_temp = requests.get(
+                img_temp = self.session.get(
                     url, headers=self.headers, timeout=15, verify=False)
                 break
-            except requests.exceptions.RequestException:
+            except self.session.exceptions.RequestException:
                 print('连接异常！正在重试！')
                 t += 1
         if t == 3:
@@ -117,7 +118,7 @@ class PixivSpider(Cmd):
             'p': f'{num}',
             'format': 'json'
         }
-        response = requests.get(self.top_url, params=params, headers=self.headers, verify=False)
+        response = self.session.get(self.top_url, params=params, headers=temp_headers, verify=False)
         json_data = response.json()
         self.pixiv_spider_go(json_data['contents'])
 
@@ -174,7 +175,7 @@ class PixivSpider(Cmd):
             }
 
         try:
-            response = requests.get(self.home_url.format(uid), headers = temp_headers, verify=False)
+            response = self.session.get(self.home_url.format(uid), headers = temp_headers, verify=False)
             user_name = re.findall('og:title" content="(.*?)">', response.text)
             if not user_name:
                 print('[Pixiv] 未查询到ID，请检查您的uid是否输入正确！')
@@ -183,7 +184,7 @@ class PixivSpider(Cmd):
                 self.main()
             print(f'[Pixiv] 欢迎～{user_name[0]}!')
             print('[System] 初始化中...第一次运行本程序时该过程需要一段时间...')
-            self.session.get('https://pixiv.net',headers = temp_headers, verify = False).html.render()
+            # self.session.get('https://pixiv.net',headers = temp_headers, verify = False).html.render()
             print('[System] 初始化完成。')
             print('[Pixiv] 是不是觉得迷茫呢？请输入help来获取帮助吧！')
             print('[Pixiv] 我只能看得懂普通的小写字母哦！！！')
@@ -209,7 +210,7 @@ class PixivSpider(Cmd):
         exit()
 
     def emptyline(self):
-        print '请输入指令！输入help可查看帮助！'
+        print ('请输入指令！输入help可查看帮助！')
 
     def do_rank(self, arg):
         self.pixiv_main()
@@ -218,16 +219,12 @@ class PixivSpider(Cmd):
         if not uid:
             print('[Pixiv] 您未输入uid，无法使用本功能哦！')
             self.main()
-        response = self.session.get(self.stars_url.format(uid), headers = temp_headers, verify=False)
-        response = response.html.render()
+        res = self.session.get(self.stars_url.format(uid), headers = temp_headers, verify=False)
+        res.html.render()
+        # css = res.html.find('#illust_id')
+        # print(css)
+        pass
 
-        print(response.text)
-        # i = input()
-        pid = re.findall('illust_id=(\d+).*',response.text)
-        print(pid)
-        # for i in pid:
-        #     print(i)
-        #     self.get_list(i)
     def do_like(self, arg):
         pass
 
