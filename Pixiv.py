@@ -19,7 +19,7 @@ from cmd import Cmd
 
 
 try:
-    print('[System] 初始化中.....')
+
     import redis
     import requests-html
 
@@ -41,6 +41,8 @@ error_list = []
 
 
 class PixivSpider(Cmd):
+    prompt = 'Pixiv>'
+
 
     def __init__(self):
         super().__init__()
@@ -48,6 +50,7 @@ class PixivSpider(Cmd):
         self.top_url = 'https://www.pixiv.net/ranking.php'
         self.home_url = 'https://www.pixiv.net/users/{}'
         self.stars_url = 'https://www.pixiv.net/users/{}/bookmarks/artworks'
+        self.session = HTMLSession()
         self.r = redis.Redis(host='localhost', port=6379,decode_responses=True)
 
     def get_list(self, pid):
@@ -179,6 +182,9 @@ class PixivSpider(Cmd):
                 self.r.delete('uid')
                 self.main()
             print(f'[Pixiv] 欢迎～{user_name[0]}!')
+            print('[System] 初始化中...第一次运行本程序时该过程需要一段时间...')
+            self.session.get('https://pixiv.net',headers = temp_headers, verify = False).html.render()
+            print('[System] 初始化完成。')
             print('[Pixiv] 是不是觉得迷茫呢？请输入help来获取帮助吧！')
             print('[Pixiv] 我只能看得懂普通的小写字母哦！！！')
         except:
@@ -187,6 +193,9 @@ class PixivSpider(Cmd):
         
         self.do_stars(self)
         # self.cmdloop()
+
+    def default(self, line):
+        print('[Pixiv] 没有查询到该指令！')
 
     def do_help(self, arg):
         print('…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·…·')
@@ -199,6 +208,9 @@ class PixivSpider(Cmd):
     def do_quit(self, arg):
         exit()
 
+    def emptyline(self):
+        print '请输入指令！输入help可查看帮助！'
+
     def do_rank(self, arg):
         self.pixiv_main()
 
@@ -206,8 +218,9 @@ class PixivSpider(Cmd):
         if not uid:
             print('[Pixiv] 您未输入uid，无法使用本功能哦！')
             self.main()
-        response = requests.get(self.stars_url.format(uid), headers = temp_headers, verify=False)
-        # img src="https://i.pximg.net/c/250x250_80_a2/img-master/img/2021/04/06/18/20/45/88976071_p0_square1200.jpg
+        response = self.session.get(self.stars_url.format(uid), headers = temp_headers, verify=False)
+        response = response.html.render()
+
         print(response.text)
         # i = input()
         pid = re.findall('illust_id=(\d+).*',response.text)
