@@ -17,18 +17,17 @@ import os
 import re
 from cmd import Cmd
 
-from requests.models import Response
 
 try:
     print('[System] 初始化中.....')
     import redis
-    import requests
+    import requests-html
 
 except:
     print('[System] 检测到缺少必要包！正在尝试安装！.....')
     os.system(r'pip install -r requirements.txt')
     import redis
-    import requests
+    import requests-html
 
 requests.packages.urllib3.disable_warnings()  # 解决报错
 error_list = []
