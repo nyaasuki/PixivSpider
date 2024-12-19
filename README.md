@@ -2,7 +2,7 @@
 
 ## 环境需求
 
-Python:3.6+ / Redis
+Python:3.8+ / Redis
 
 ## 食用方法
 
@@ -40,10 +40,16 @@ ERROR: No matching distribution found for resquests`
 
 2.请输入一个cookie
 
-目前此项留空直接回车也可以正常爬取，如果后续添加新功能可以能需要
+目前此项留空直接回车也可以正常爬取（匿名模式），如果后续添加新功能可能需要
 
 此项储存在本地redis中
 
+3.错误：无法连接到Redis服务，请确保Redis服务正在运行
+项目使用redis查重 需要安装redis 
+官方安装教程：https://redis.io/docs/latest/operate/oss_and_stack/install/install-redis/
+
+同时新增了一个redis快速管理小工具 能自动识别写入的数据库 提供查和删功能
+使用方法同上 运行 redis_monitor.py 即可
 ## 特别提醒
 
 正常来说，当没有出现上方问题时，程序出现问题大多为你的上网方式不够科学
