@@ -40,7 +40,7 @@ ERROR: No matching distribution found for resquests`
 
 2.请输入一个cookie
 
-目前此项留空直接回车也可以正常爬取，如果后续添加新功能可以能需要
+目前此项留空直接回车也可以正常爬取（匿名模式），如果后续添加新功能可能需要
 
 此项储存在本地redis中
 
