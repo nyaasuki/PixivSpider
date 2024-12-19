@@ -2,7 +2,7 @@
 
 ## 环境需求
 
-Python:3.6+ / Redis
+Python:3.8+ / Redis
 
 ## 食用方法
 
