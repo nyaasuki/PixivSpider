@@ -2,42 +2,109 @@
 P站小爬虫 爬每日排行榜
 环境需求：Python3.8+ / Redis 
 项目地址：https://github.com/nyaasuki/PixivSpider
-
 """
 
 import re
 import os
+import sys
+import time
 
 try:
     import requests
     import redis
+    from rich.console import Console
+    from rich.progress import Progress, BarColumn, TaskProgressColumn, TextColumn, SpinnerColumn
+    from rich.live import Live
+    from rich.layout import Layout
 
 except:
     print('检测到缺少必要包！正在尝试安装！.....')
     os.system(r'pip install -r requirements.txt')
     import requests
     import redis
+    from rich.console import Console
+    from rich.progress import Progress, BarColumn, TaskProgressColumn, TextColumn, SpinnerColumn
+    from rich.live import Live
+    from rich.layout import Layout
 
 requests.packages.urllib3.disable_warnings()
 error_list = []
 
+# 创建Console对象用于日志输出
+console = Console()
+
+# 创建Layout布局
+layout = Layout()
+layout.split(
+    Layout(name="PixivSpider", ratio=8),
+    Layout(name="progress", ratio=2)
+)
+
+# 创建日志面板并设置样式
+from rich.panel import Panel
+from rich.live import Live
+from rich.console import Group
+
+# 创建日志存储列表
+log_messages = []
+
+def update_log(message):
+    """更新日志显示"""
+    log_messages.append(message)
+    if len(log_messages) > 18:  # 保持最近的18条日志
+        log_messages.pop(0)
+    log_group = Group(*log_messages)
+    layout["PixivSpider"].update(
+        Panel(
+            log_group,
+            title="PixivSpider",
+            title_align="left",
+            border_style="cyan",
+            padding=(0, 1)
+        )
+    )
+
+# 创建Console对象用于日志输出
+console = Console()
+
+def format_speed(speed):
+    """格式化速度显示，保留两位小数并添加单位"""
+    return f"{speed:.2f}t/秒" if speed is not None else ""
+
+# 创建进度条
+progress = Progress(
+    TextColumn("[bold blue]{task.description}"),
+    BarColumn(bar_width=40),
+    TaskProgressColumn(),
+    TextColumn("{task.fields[speed]}"),
+    console=Console(stderr=True),  # 使用stderr以避免与日志混合
+    expand=True,
+)
 
 class PixivSpider(object):
+    # 类变量用于跟踪总体进度
+    total_images = 500  # 每日排行榜总图片数
+    main_task_id = None  # 主任务ID
+    current_subtask_id = None  # 当前子任务ID
 
     def __init__(self, db=0):
         self.ajax_url = 'https://www.pixiv.net/ajax/illust/{}/pages'  # id
         self.top_url = 'https://www.pixiv.net/ranking.php'
         self.r = redis.Redis(host='localhost', port=6379, db=db, decode_responses=True)
+        # 创建进度显示所需的任务
+        with Live(layout, console=console, refresh_per_second=10):
+            cls = self.__class__
+            if not cls.main_task_id:
+                layout["progress"].update(progress)
+                cls.main_task_id = progress.add_task("[cyan]总体进度", total=cls.total_images, speed="")
 
     def get_list(self, pid):
-        """
-        获取作品所有页面的URL
-        :param pid: 作品ID
-        """
+        """获取作品所有页面的URL"""
         try:
             # 检查Redis中是否已记录该作品已完全下载
             if self.r.get(f'downloaded:{pid}') == 'complete':
-                print(f'作品ID:{pid}已在Redis中标记为完全下载，跳过')
+                update_log(f'[yellow]作品ID:{pid}已在Redis中标记为完全下载，跳过[/yellow]')
+                progress.update(self.__class__.main_task_id, advance=1)
                 return None
 
             # 发送请求获取作品的所有图片信息
@@ -46,13 +113,13 @@ class PixivSpider(object):
             
             # 检查API返回是否有错误
             if json_data.get('error'):
-                print(f'获取作品ID:{pid}失败：{json_data.get("message")}')
+                update_log(f'[red]获取作品ID:{pid}失败：{json_data.get("message")}[/red]')
                 return pid
                 
             # 从返回数据中获取图片列表
             images = json_data.get('body', [])
             if not images:
-                print(f'作品ID:{pid}没有图片')
+                update_log(f'[red]作品ID:{pid}没有图片[/red]')
                 return pid
                 
             # 获取Redis中已下载的页面记录
@@ -68,45 +135,70 @@ class PixivSpider(object):
                         page = int(re.search(r'_p(\d+)\.', f).group(1))
                         if self.r.get(f'downloaded:{pid}_p{page}') != 'true':
                             self.r.set(f'downloaded:{pid}_p{page}', 'true')
-                            print(f'发现本地文件并更新Redis记录：{f}')
+                            update_log(f'[green]发现本地文件并更新Redis记录：{f}[/green]')
             
             # 使用Redis记录作为唯一来源
             downloaded = downloaded_redis
             
             # 遍历所有图片进行下载
-            for image in images:
-                # 检查图片数据格式是否正确
-                if 'urls' not in image or 'original' not in image['urls']:
-                    print(f'作品ID:{pid}的图片数据格式错误')
-                    continue
+            if len(images) > 1:
+                # 对于多图片组，创建子进度条
+                with progress:
+                    subtask_id = progress.add_task(
+                        f"[yellow]PID:{pid}",
+                        total=len(images),
+                        visible=True,
+                        speed=""
+                    )
+                    for image in images:
+                        if 'urls' not in image or 'original' not in image['urls']:
+                            update_log(f'[red]作品ID:{pid}的图片数据格式错误[/red]')
+                            progress.update(subtask_id, advance=1)
+                            continue
+                            
+                        original_url = image['urls']['original']
+                        page_num = int(re.search(r'_p(\d+)\.', original_url).group(1))
+                        
+                        if page_num in downloaded:
+                            update_log(f'[yellow]作品ID:{pid} 第{page_num}页在Redis中已标记为下载，跳过[/yellow]')
+                            progress.update(subtask_id, advance=1)
+                            continue
+                            
+                        why_not_do = self.get_img(original_url)
+                        progress.update(subtask_id, advance=1)
+                        if why_not_do == 1:
+                            return pid
+                    progress.remove_task(subtask_id)
+            else:
+                # 单图片直接处理
+                for image in images:
+                    if 'urls' not in image or 'original' not in image['urls']:
+                        update_log(f'[red]作品ID:{pid}的图片数据格式错误[/red]')
+                        continue
+                        
+                    original_url = image['urls']['original']
+                    page_num = int(re.search(r'_p(\d+)\.', original_url).group(1))
                     
-                # 获取原图URL和页码信息
-                original_url = image['urls']['original']
-                page_num = int(re.search(r'_p(\d+)\.', original_url).group(1))
-                
-                # 检查是否已下载过该页面（优先使用Redis记录）
-                if page_num in downloaded:
-                    print(f'作品ID:{pid} 第{page_num}页在Redis中已标记为下载，跳过')
-                    continue
-                    
-                # 下载图片，如果下载失败返回作品ID以便后续处理
-                why_not_do = self.get_img(original_url)
-                if why_not_do == 1:
-                    return pid
+                    if page_num in downloaded:
+                        update_log(f'[yellow]作品ID:{pid} 第{page_num}页在Redis中已标记为下载，跳过[/yellow]')
+                        continue
+                        
+                    why_not_do = self.get_img(original_url)
+                    if why_not_do == 1:
+                        return pid
+            
+            # 更新总进度
+            progress.update(self.__class__.main_task_id, advance=1)
                     
         except requests.exceptions.RequestException as e:
-            print(f'获取作品ID:{pid}时发生网络错误：{str(e)}')
+            update_log(f'[red]获取作品ID:{pid}时发生网络错误：{str(e)}[/red]')
             return pid
         except Exception as e:
-            print(f'处理作品ID:{pid}时发生错误：{str(e)}')
+            update_log(f'[red]处理作品ID:{pid}时发生错误：{str(e)}[/red]')
             return pid
 
     def get_img(self, url):
-        """
-        下载单个图片
-        :param url: 原图URL，格式如：https://i.pximg.net/img-original/img/2024/12/14/20/00/36/125183562_p0.jpg
-        :return: 0表示下载成功，1表示下载失败
-        """
+        """下载单个图片"""
         # 确保下载目录存在
         if not os.path.isdir('./img'):
             os.makedirs('./img')
@@ -114,7 +206,7 @@ class PixivSpider(object):
         # 从URL提取作品ID、页码和文件扩展名
         match = re.search(r'/(\d+)_p(\d+)\.([a-z]+)$', url)
         if not match:
-            print(f'无效的URL格式: {url}')
+            update_log(f'[red]无效的URL格式: {url}[/red]')
             return 1
             
         # 解析URL信息并构建文件名
@@ -123,35 +215,31 @@ class PixivSpider(object):
         
         # 检查Redis中是否已记录为下载
         if self.r.get(f'downloaded:{illust_id}_p{page_num}') == 'true':
-            print(f'Redis记录：{file_name}已下载，跳过')
+            update_log(f'[yellow]Redis记录：{file_name}已下载，跳过[/yellow]')
             return 0
             
         # 作为备份检查，验证文件是否存在
         if os.path.isfile(f'./img/{file_name}'):
-            # 如果文件存在但Redis没有记录，更新Redis记录
             self.r.set(f'downloaded:{illust_id}_p{page_num}', 'true')
-            print(f'文件已存在但Redis未记录，已更新Redis：{file_name}')
+            update_log(f'[green]文件已存在但Redis未记录，已更新Redis：{file_name}[/green]')
             return 0
             
         # 开始下载流程
-        print(f'开始下载：{file_name} (第{int(page_num)+1}张)')
+        update_log(f'[cyan]开始下载：{file_name} (第{int(page_num)+1}张)[/cyan]')
         t = 0  # 重试计数器
-        # 最多重试3次
         while t < 3:
             try:
-                # 下载图片，设置15秒超时
                 img_temp = requests.get(url, headers=self.headers, timeout=15, verify=False)
                 if img_temp.status_code == 200:
                     break
-                print(f'下载失败，状态码：{img_temp.status_code}')
+                update_log(f'[red]下载失败，状态码：{img_temp.status_code}[/red]')
                 t += 1
             except requests.exceptions.RequestException as e:
-                print(f'连接异常：{str(e)}')
+                update_log(f'[red]连接异常：{str(e)}[/red]')
                 t += 1
         
-        # 如果重试3次都失败，放弃下载
         if t == 3:
-            print(f'下载失败次数过多，跳过该图片')
+            update_log(f'[red]下载失败次数过多，跳过该图片[/red]')
             return 1
             
         # 将图片内容写入文件
@@ -160,30 +248,28 @@ class PixivSpider(object):
             
         # 下载成功后在Redis中记录
         self.r.set(f'downloaded:{illust_id}_p{page_num}', 'true')
-        # 获取作品总页数并检查是否已下载所有页面
         page_count = self.r.get(f'total_pages:{illust_id}')
         if not page_count:
-            # 当前页号+1可能是总页数（保守估计）
             self.r.set(f'total_pages:{illust_id}', str(int(page_num) + 1))
         elif int(page_num) + 1 == int(page_count):
-            # 如果当前是最后一页，检查是否所有页面都已下载
             all_downloaded = all(
                 self.r.get(f'downloaded:{illust_id}_p{i}') == 'true'
                 for i in range(int(page_count))
             )
             if all_downloaded:
                 self.r.set(f'downloaded:{illust_id}', 'complete')
-                print(f'作品ID:{illust_id}已完全下载')
+                update_log(f'[green]作品ID:{illust_id}已完全下载[/green]')
             
-        print(f'下载完成并已记录到Redis：{file_name}')
+        if not self.r.exists(f'total_pages:{illust_id}') or int(page_num) == 0:
+            # 单图片直接显示下载完成信息
+            update_log(f'[green]{file_name} 已下载![/green]')
+        else:
+            # 多图片组显示详细信息
+            update_log(f'[green]下载完成并已记录到Redis：{file_name}[/green]')
         return 0
 
     def get_top_url(self, num):
-        """
-        获取每日排行榜的特定页码数据
-        :param num: 页码数（1-10）
-        :return: None
-        """
+        """获取每日排行榜的特定页码数据"""
         params = {
             'mode': 'daily',
             'content': 'illust',
@@ -195,61 +281,43 @@ class PixivSpider(object):
         self.pixiv_spider_go(json_data['contents'])
 
     def get_top_pic(self):
-        """
-        从排行榜数据中提取作品ID和用户ID
-        并将用户ID存入Redis数据库中
-        :return: 生成器，返回作品ID
-        """
+        """从排行榜数据中提取作品ID和用户ID"""
         for url in self.data:
-            illust_id = url['illust_id']  # 获取作品ID
-            illust_user = url['user_id']  # 获取用户ID
-            yield illust_id  # 生成作品ID
-            self.r.set(illust_id, illust_user)  # 将PID保存到Redis中
+            illust_id = url['illust_id']
+            illust_user = url['user_id']
+            yield illust_id
+            self.r.set(illust_id, illust_user)
 
     @classmethod
     def pixiv_spider_go(cls, data):
-        """
-        存储排行榜数据供后续处理
-        :param data: 排行榜JSON数据中的contents部分
-        """
+        """存储排行榜数据供后续处理"""
         cls.data = data
 
     @classmethod
     def pixiv_main(cls):
-        """
-        爬虫主函数
-        1. 选择Redis数据库
-        2. 获取或设置Cookie
-        3. 配置请求头
-        4. 遍历排行榜页面（1-10页）
-        5. 下载每个作品的所有图片
-        6. 处理下载失败的作品
-        """
-        # 选择Redis数据库
+        """爬虫主函数"""
         while True:
             try:
-                print("\n可用的Redis数据库:")
+                console.print("\n[cyan]可用的Redis数据库:[/cyan]")
                 for i in range(6):
-                    print(f"{i}.DB{i}")
+                    console.print(f"{i}.DB{i}")
                 db_choice = input("\n请选择Redis数据库 (0-5): ")
                 db_num = int(db_choice)
                 if 0 <= db_num <= 5:
                     break
-                print("错误：请输入0到5之间的数字")
+                console.print("[red]错误：请输入0到5之间的数字[/red]")
             except ValueError:
-                print("错误：请输入有效的数字")
+                console.print("[red]错误：请输入有效的数字[/red]")
         
         global pixiv
         pixiv = PixivSpider(db_num)
-        print(f"\n已选择 DB{db_num}")
+        console.print(f"\n[green]已选择 DB{db_num}[/green]")
         
-        # 从Redis获取Cookie，如果没有则要求用户输入
         cookie = pixiv.r.get('cookie')
         if not cookie:
             cookie = input('请输入一个cookie：')
             pixiv.r.set('cookie', cookie)
             
-        # 配置请求头，包含必要的HTTP头部信息
         cls.headers = {
             'accept': 'application/json',
             'accept-language': 'zh-CN,zh;q=0.9,zh-TW;q=0.8,en-US;q=0.7,en;q=0.6',
@@ -261,33 +329,44 @@ class PixivSpider(object):
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.75 Safari/537.36'
         }
         
-        print('开始抓取...')
-        # 遍历排行榜前10页
-        for i in range(1, 11, 1):  # p站每日排行榜最多为500个（50个/页 x 10页）
-            pixiv.get_top_url(i)  # 获取当前页的排行榜数据
-            for j in pixiv.get_top_pic():  # 遍历当前页的所有作品
-                k = pixiv.get_list(j)  # 下载作品的所有图片
-                if k:  # 如果下载失败，将作品ID添加到错误列表
-                    error_list.append(k)
+        console.print('[cyan]开始抓取...[/cyan]')
+        
+        start_time = time.time()  # 添加计时器用于计算速度
+        processed_count = 0  # 记录已处理的图片数量
+        
+        with Live(layout, console=console, refresh_per_second=10):
+            layout["progress"].update(progress)
+            # 遍历排行榜前10页
+            for i in range(1, 11, 1):
+                pixiv.get_top_url(i)
+                for j in pixiv.get_top_pic():
+                    k = pixiv.get_list(j)
+                    if k:
+                        error_list.append(k)
                     
-        # 清理下载失败的作品记录
-        for k in error_list:
-            pixiv.r.delete(k)
-
+                    # 更新处理计数和速度
+                    processed_count += 1
+                    elapsed = time.time() - start_time
+                    if elapsed > 0:
+                        speed = processed_count / elapsed
+                        progress.update(pixiv.__class__.main_task_id, speed=format_speed(speed))
+            
+            # 清理下载失败的作品记录
+            for k in error_list:
+                pixiv.r.delete(k)
 
 if __name__ == '__main__':
     try:
-        print('正在启动Pixiv爬虫...')
-        print('确保已安装并启动Redis服务')
-        print('确保已准备好有效的Pixiv Cookie')
+        console.print('[cyan]正在启动Pixiv爬虫...[/cyan]')
+        console.print('[yellow]确保已安装并启动Redis服务[/yellow]')
+        console.print('[yellow]确保已准备好有效的Pixiv Cookie[/yellow]')
         
-        # 运行主程序
         PixivSpider.pixiv_main()
         
-        print('爬虫运行完成')
+        console.print('[green]爬虫运行完成[/green]')
     except redis.exceptions.ConnectionError:
-        print('错误：无法连接到Redis服务，请确保Redis服务正在运行')
+        console.print('[red]错误：无法连接到Redis服务，请确保Redis服务正在运行[/red]')
     except KeyboardInterrupt:
-        print('\n用户中断运行')
+        console.print('\n[yellow]用户中断运行[/yellow]')
     except Exception as e:
-        print(f'发生错误：{str(e)}')
+        console.print(f'[red]发生错误：{str(e)}[/red]')
