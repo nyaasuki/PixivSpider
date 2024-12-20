@@ -1,5 +1,7 @@
 **一个Pixiv小爬虫，目前只可以爬每日， 支持长时间爬取 跳过已经爬过的**
 
+![HapiGo_2024-12-20_12.39.49.png](https://img.nyaasuki.com/2024/12/20/6764f51f5fccf.png)
+
 ## 环境需求
 
 Python:3.8+ / Redis
@@ -10,7 +12,7 @@ Python:3.8+ / Redis
 
 ```shell
 git clone https://github.com/nyaasuki/PixivSpider.git && cd ./PixivSpider
-python3 Pixiv.py
+python3 main.py
 ```
 
 **Windows:**
@@ -23,7 +25,7 @@ python3 Pixiv.py
 
 4. 输入python+‘ ’    ←这是一个空格
 
-5. 用鼠标把**Pixiv.py**这个文件拖到cmd窗口
+5. 用鼠标把**main.py**这个文件拖到cmd窗口
 
    ​	^_^
 
@@ -48,8 +50,6 @@ ERROR: No matching distribution found for resquests`
 项目使用redis查重 需要安装redis 
 官方安装教程：https://redis.io/docs/latest/operate/oss_and_stack/install/install-redis/
 
-同时新增了一个redis快速管理小工具 能自动识别写入的数据库 提供查和删功能
-使用方法同上 运行 redis_monitor.py 即可
 ## 特别提醒
 
 正常来说，当没有出现上方问题时，程序出现问题大多为你的上网方式不够科学
